@@ -45,9 +45,13 @@ xcodebuild test -project Drama.xcodeproj -scheme Drama -sdk iphonesimulator -des
 ```
 
 ## Screenshots
-<img width="1206" height="2622" alt="Simulator Screenshot - iPhone 17 Pro - 2026-02-04 at 19 25 11" src="https://github.com/user-attachments/assets/439b1c4d-46e2-4c9c-b53f-8bd55595f0f6" />
-<img width="1206" height="2622" alt="Simulator Screenshot - iPhone 17 Pro - 2026-02-04 at 19 25 28" src="https://github.com/user-attachments/assets/5f1cf975-cd9b-4253-8dc3-b8adc89f9ead" />
-<img width="1206" height="2622" alt="Simulator Screenshot - iPhone 17 Pro - 2026-02-04 at 19 25 35" src="https://github.com/user-attachments/assets/4daeb9c7-1083-49e6-8546-b650846d049e" />
+<table width="100%">
+  <tr>
+    <td width="33%"><img src="https://github.com/user-attachments/assets/439b1c4d-46e2-4c9c-b53f-8bd55595f0f6"></td>
+    <td width="33%"><img src="https://github.com/user-attachments/assets/5f1cf975-cd9b-4253-8dc3-b8adc89f9ead"></td>
+    <td width="33%"><img src="https://github.com/user-attachments/assets/4daeb9c7-1083-49e6-8546-b650846d049e"></td>
+  </tr>
+</table>
 
 
 ## Roadmap
