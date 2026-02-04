@@ -37,6 +37,13 @@ Availability or behavior of that API can change without notice. Use at your own 
 - Select a simulator or device.
 - Build and run from Xcode.
 
+## Deploy (No Apple Developer Account)
+If you don't have an Apple Developer Account, you can sideload the app using AltStore with AltServer:
+- macOS install guide: https://faq.altstore.io/altstore-classic/how-to-install-altstore-macos
+- Windows install guide: https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows
+
+Once AltStore is installed on your device, you can export the IPA from Xcode and install it through AltStore.
+
 ## Tests
 ```bash
 xcodebuild test -project Drama.xcodeproj -scheme Drama -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17'
