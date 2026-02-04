@@ -5,7 +5,6 @@ struct DramaDetailView: View {
     let onBack: () -> Void
 
     @StateObject private var viewModel: DramaDetailViewModel
-    @State private var localNotificationEnabled = false
 
     init(drama: Drama, onBack: @escaping () -> Void) {
         self.drama = drama
@@ -17,7 +16,7 @@ struct DramaDetailView: View {
         ZStack {
             VStack(spacing: 0) {
                 // Header
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 16) {
                     // Back button
                     Button(action: onBack) {
                         HStack(spacing: 6) {
@@ -29,58 +28,71 @@ struct DramaDetailView: View {
                     }
                     .frame(height: 44)
 
-                    // Drama header
-                    HStack(alignment: .top, spacing: 12) {
+                    // Drama header - improved layout
+                    HStack(alignment: .top, spacing: 16) {
                         if let imageUrl = drama.image, let url = URL(string: imageUrl) {
-                            AsyncImage(url: url) { phase in
+                            CachedAsyncImage(url: url) { phase in
                                 switch phase {
                                 case .success(let image):
                                     image
                                         .resizable()
-                                        .scaledToFill()
-                                case .loading:
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 110, height: 165)
+                                        .clipped()
+                                case .empty:
                                     ProgressView()
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                case .empty, .failure:
+                                        .frame(width: 110, height: 165)
+                                case .failure:
                                     Image(systemName: "tv.fill")
-                                        .font(.system(size: 24))
+                                        .font(.system(size: 32))
                                         .foregroundColor(.gray)
+                                        .frame(width: 110, height: 165)
                                 @unknown default:
                                     EmptyView()
                                 }
                             }
-                            .frame(width: 80, height: 120)
                             .background(Color.white.opacity(0.05))
-                            .cornerRadius(8)
+                            .cornerRadius(12)
+                            .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
                         } else {
                             Image(systemName: "tv.fill")
-                                .font(.system(size: 32))
+                                .font(.system(size: 40))
                                 .foregroundColor(.gray)
-                                .frame(width: 80, height: 120)
+                                .frame(width: 110, height: 165)
                                 .background(Color.white.opacity(0.05))
-                                .cornerRadius(8)
+                                .cornerRadius(12)
                         }
 
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 10) {
                             Text(drama.title)
-                                .font(.system(size: 18, weight: .bold))
+                                .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.white)
-                                .lineLimit(2)
+                                .lineLimit(3)
 
                             HStack(spacing: 8) {
                                 Text(drama.status)
                                     .font(.caption)
-                                    .fontWeight(.medium)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
                                     .background(statusColor.opacity(0.3))
                                     .foregroundColor(statusColor)
-                                    .cornerRadius(4)
+                                    .cornerRadius(6)
 
-                                if let rating = drama.rating, !rating.isEmpty {
-                                    Text("★ \(rating)")
-                                        .font(.caption)
-                                        .foregroundColor(.yellow)
+                                if let overallRating = drama.overallRating, !overallRating.isEmpty {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "star.fill")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.yellow)
+                                        Text(overallRating)
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.yellow)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(Color.yellow.opacity(0.15))
+                                    .cornerRadius(6)
                                 }
                             }
 
@@ -88,50 +100,22 @@ struct DramaDetailView: View {
 
                             if let url = drama.url, let dramURL = URL(string: url) {
                                 Link(destination: dramURL) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "link")
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "link.circle.fill")
+                                            .font(.system(size: 14))
                                         Text("View on MDL")
+                                            .font(.system(size: 14, weight: .medium))
                                     }
-                                    .font(.caption)
                                     .foregroundColor(Color(red: 0.86, green: 0.5, blue: 1.0))
                                 }
                             }
                         }
                         .frame(maxHeight: .infinity, alignment: .topLeading)
                     }
+                    .frame(height: 165)
                 }
                 .padding(16)
-
-                // Notification toggle
-                VStack(spacing: 12) {
-                    HStack(spacing: 12) {
-                        Image(systemName: localNotificationEnabled ? "bell.fill" : "bell.slash.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(localNotificationEnabled ? Color(red: 0.86, green: 0.5, blue: 1.0) : .gray)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Episode Notifications")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
-                            Text("Get notified on air dates")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-
-                        Spacer()
-
-                        Toggle("", isOn: $localNotificationEnabled)
-                            .onChange(of: localNotificationEnabled) { _ in
-                                Task {
-                                    await viewModel.toggleNotification()
-                                }
-                            }
-                    }
-                    .padding(12)
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(8)
-                }
-                .padding(.horizontal, 16)
+                .background(Color.white.opacity(0.02))
 
                 // Episodes
                 VStack(alignment: .leading, spacing: 12) {
@@ -213,12 +197,6 @@ struct DramaDetailView: View {
         }
         .task {
             await viewModel.loadEpisodes()
-        }
-        .onChange(of: viewModel.notificationEnabled) { newValue in
-            localNotificationEnabled = newValue
-        }
-        .onAppear {
-            localNotificationEnabled = viewModel.notificationEnabled
         }
     }
 

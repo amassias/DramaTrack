@@ -35,6 +35,8 @@ struct EpisodeRowView: View {
                         .font(.caption)
                         .foregroundColor(.gray)
                         .lineLimit(1)
+                } else {
+                    EmptyView()
                 }
             }
 
@@ -52,12 +54,12 @@ struct EpisodeRowView: View {
                 }
                 .foregroundColor(episodeStatusColor)
 
-                if !episode.isAired && episode.airDate != nil {
-                    let formatter = DateFormatter()
-                    formatter.dateStyle = .short
-                    Text(formatter.string(from: episode.airDate!))
+                if !episode.isAired, let airDate = episode.airDate {
+                    Text(shortDateString(from: airDate))
                         .font(.caption2)
                         .foregroundColor(.gray)
+                } else {
+                    EmptyView()
                 }
             }
         }
@@ -66,39 +68,37 @@ struct EpisodeRowView: View {
         .cornerRadius(6)
     }
 
+    private func shortDateString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        return formatter.string(from: date)
+    }
+
     private var dateLabel: String {
-        if let airDate = episode.airDate {
-            if episode.isAired {
-                return "Aired"
-            } else {
-                return "Upcoming"
-            }
+        if episode.airDate != nil {
+            return episode.isAired ? "Aired" : "Upcoming"
         }
         return "TBA"
     }
 
     private var episodeStatusColor: Color {
-        guard let airDate = episode.airDate else {
+        guard episode.airDate != nil else {
             return .gray
         }
 
-        if episode.isAired {
-            return Color(red: 0.86, green: 0.5, blue: 1.0)
-        } else {
-            return Color(red: 0.2, green: 0.6, blue: 1.0)
-        }
+        return episode.isAired
+            ? Color(red: 0.86, green: 0.5, blue: 1.0)
+            : Color(red: 0.2, green: 0.6, blue: 1.0)
     }
 
     private var episodeBgColor: Color {
-        guard let airDate = episode.airDate else {
+        guard episode.airDate != nil else {
             return Color.white.opacity(0.05)
         }
 
-        if episode.isAired {
-            return Color(red: 0.86, green: 0.5, blue: 1.0).opacity(0.1)
-        } else {
-            return Color(red: 0.2, green: 0.6, blue: 1.0).opacity(0.05)
-        }
+        return episode.isAired
+            ? Color(red: 0.86, green: 0.5, blue: 1.0).opacity(0.1)
+            : Color(red: 0.2, green: 0.6, blue: 1.0).opacity(0.05)
     }
 }
 

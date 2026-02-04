@@ -25,15 +25,22 @@ struct RootView: View {
             .ignoresSafeArea()
 
             Group {
-                if let username = appState.username {
+                if let username = appState.username, appState.hasCompletedOnboarding {
                     mainContent(username: username)
                 } else {
-                    VStack {
-                        Text("Loading...")
-                            .foregroundColor(.white)
+                    OnboardingView(hasCompletedOnboarding: $appState.hasCompletedOnboarding) { username in
+                        Task {
+                            await appState.completeOnboarding(username: username)
+                        }
                     }
                 }
             }
+        }
+        .task(id: appState.watchlistViewModel.dramas.count) {
+            if appState.hasCompletedOnboarding {
+                _ = await NotificationManager.shared.requestPermissionIfNeeded()
+            }
+            await appState.autoSyncNotificationsIfNeeded()
         }
     }
 
@@ -43,10 +50,15 @@ struct RootView: View {
             Group {
                 switch currentTab {
                 case .watchlist:
-                    WatchlistView(username: username) { drama in
-                        selectedDrama = drama
-                        currentTab = .detail
-                    }
+                    WatchlistView(
+                        username: username,
+                        onSelectDrama: { drama in
+                            selectedDrama = drama
+                            currentTab = .detail
+                        },
+                        viewModel: appState.watchlistViewModel
+                    )
+                    .environmentObject(appState)
 
                 case .detail:
                     if let drama = selectedDrama {
@@ -57,9 +69,13 @@ struct RootView: View {
                     }
 
                 case .settings:
-                    SettingsView(username: username) {
+                    SettingsView(username: username, onLogout: {
                         appState.clearUsername()
-                    }
+                    }, onSelectDrama: { drama in
+                        selectedDrama = drama
+                        currentTab = .detail
+                    })
+                    .environmentObject(appState)
                 }
             }
 
@@ -94,10 +110,8 @@ struct BottomTabBar: View {
                 }
             )
 
-            Spacer()
-
             TabBarItem(
-                icon: "gear.fill",
+                icon: "gearshape.fill",
                 title: "Settings",
                 isActive: currentTab == .settings,
                 action: {
@@ -119,6 +133,7 @@ struct BottomTabBar: View {
 
 struct TabBarItem: View {
     let icon: String
+    var isSystemImage: Bool = true
     let title: String
     let isActive: Bool
     let action: () -> Void
@@ -126,11 +141,20 @@ struct TabBarItem: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 18))
+                if isSystemImage {
+                    Image(systemName: icon)
+                        .font(.system(size: 24, weight: .semibold))
+                        .imageScale(.large)
+                } else {
+                    Image(icon)
+                        .resizable()
+                        .renderingMode(.template)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 25, height: 25)
+                }
                 Text(title)
-                    .font(.caption2)
-                    .fontWeight(.medium)
+                    .font(.caption)
+                    .fontWeight(.semibold)
             }
             .foregroundColor(isActive ? Color(red: 0.86, green: 0.5, blue: 1.0) : Color(red: 0.6, green: 0.6, blue: 0.6))
             .frame(maxWidth: .infinity)

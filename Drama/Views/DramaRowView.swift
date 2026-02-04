@@ -9,16 +9,16 @@ struct DramaRowView: View {
             HStack(alignment: .top, spacing: 12) {
                 // Poster
                 if let imageUrl = drama.image, let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { phase in
+                    CachedAsyncImage(url: url) { phase in
                         switch phase {
                         case .success(let image):
                             image
                                 .resizable()
                                 .scaledToFill()
-                        case .loading:
+                        case .empty:
                             ProgressView()
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        case .empty, .failure:
+                        case .failure:
                             Image(systemName: "tv.fill")
                                 .font(.system(size: 16))
                                 .foregroundColor(.gray)
@@ -55,10 +55,29 @@ struct DramaRowView: View {
                             .foregroundColor(statusColor)
                             .cornerRadius(4)
 
-                        if let rating = drama.rating, !rating.isEmpty {
-                            Text("★ \(rating)")
-                                .font(.caption2)
-                                .foregroundColor(.yellow)
+                        if let overallRating = drama.overallRating, !overallRating.isEmpty {
+                            HStack(spacing: 2) {
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.yellow)
+                                Text(overallRating)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.yellow)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color.yellow.opacity(0.15))
+                            .cornerRadius(4)
+                        } else {
+                            HStack(spacing: 2) {
+                                Image(systemName: "star")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.gray.opacity(0.5))
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                    .tint(.gray.opacity(0.5))
+                            }
                         }
 
                         Spacer()

@@ -69,6 +69,23 @@ class APIClient {
         }
     }
 
+    func fetchDramaDetails(slug: String) async throws -> DramaDetail {
+        let endpoint = "/api/id/\(slug)"
+        let url = try buildURL(endpoint: endpoint)
+
+        let data = try await fetchWithRetry(url: url)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let details = try decoder.decode(DramaDetail.self, from: data)
+            return details
+        } catch {
+            throw APIError.decodingError(error.localizedDescription)
+        }
+    }
+
     func fetchEpisodes(slug: String) async throws -> [Episode] {
         let endpoint = "/api/id/\(slug)/episodes"
         let url = try buildURL(endpoint: endpoint)
@@ -79,28 +96,69 @@ class APIClient {
         decoder.dateDecodingStrategy = .iso8601
 
         do {
-            // Try array format first
-            if let episodes = try? decoder.decode([Episode].self, from: data) {
+            // First, try to decode as direct array
+            do {
+                let episodes = try decoder.decode([Episode].self, from: data)
+                print("✅ Successfully decoded \(episodes.count) episodes as direct array")
                 return episodes
+            } catch {
+                print("❌ Array decoding failed for episodes: \(error)")
             }
-
-            // Try object with episodes key
-            if let response = try? decoder.decode([String: [Episode]].self, from: data),
-               let episodes = response["episodes"] ?? response["episode_list"] {
-                return episodes
+            
+            // Try decoding as object with episodes/data key
+            if let jsonObject = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                // Try common keys that might contain the episodes array
+                let possibleKeys = ["episodes", "episode_list", "data", "result", "content", "items"]
+                for key in possibleKeys {
+                    if let episodesValue = jsonObject[key] {
+                        do {
+                            let episodesJSON = try JSONSerialization.data(withJSONObject: episodesValue)
+                            if let episodes = try? decoder.decode([Episode].self, from: episodesJSON) {
+                                if !episodes.isEmpty {
+                                    print("✅ Successfully decoded \(episodes.count) episodes from key: \(key)")
+                                    return episodes
+                                }
+                            }
+                        } catch {
+                            print("⚠️ Failed to decode episodes from key '\(key)': \(error)")
+                            continue
+                        }
+                    }
+                }
             }
-
-            return []
+            
+            // If still no success, throw detailed error with raw data preview
+            if let jsonString = String(data: data, encoding: .utf8) {
+                let preview = String(jsonString.prefix(300))
+                throw APIError.decodingError("Could not decode episodes. Response: \(preview)")
+            } else {
+                throw APIError.decodingError("Could not decode episodes and unable to read raw data")
+            }
+        } catch let error as APIError {
+            throw error
         } catch {
-            throw APIError.decodingError(error.localizedDescription)
+            throw APIError.decodingError("Episode decoding failed: \(error.localizedDescription)")
+        }
+    }
+
+    func validateUsername(_ username: String) async throws -> Bool {
+        do {
+            _ = try await fetchWatchlist(username: username)
+            return true
+        } catch APIError.userNotFound {
+            return false
         }
     }
 
     // MARK: - Private Methods
 
     private func buildURL(endpoint: String) throws -> URL {
-        let urlString = baseURL + endpoint
-        guard let url = URL(string: urlString) else {
+        guard var components = URLComponents(string: baseURL) else {
+            throw APIError.invalidURL
+        }
+        let normalizedPath = endpoint.hasPrefix("/") ? endpoint : "/\(endpoint)"
+        components.path = normalizedPath
+        guard let url = components.url else {
             throw APIError.invalidURL
         }
         return url
@@ -136,6 +194,12 @@ class APIClient {
                 if case .invalidURL = error {
                     throw error
                 }
+            } catch let urlError as URLError {
+                if urlError.code == .timedOut {
+                    lastError = APIError.timeout
+                } else {
+                    lastError = APIError.networkError(urlError.localizedDescription)
+                }
             } catch {
                 lastError = error
             }
@@ -157,3 +221,5 @@ class APIClient {
         throw APIError.unknown
     }
 }
+
+extension APIClient: EpisodeProviding {}

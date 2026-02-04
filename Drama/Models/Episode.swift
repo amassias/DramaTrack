@@ -16,6 +16,11 @@ struct Episode: Codable, Identifiable {
         case date
         case episodeNumber = "episode_number"
         case episodeNum = "episode"
+        case episodeNo = "episode_no"
+        case ep = "ep"
+        case broadcastDate = "broadcast_date"
+        case startDate = "start_date"
+        case endDate = "end_date"
     }
 
     init(id: UUID = UUID(), number: Int, title: String? = nil, airDate: Date? = nil) {
@@ -29,23 +34,48 @@ struct Episode: Codable, Identifiable {
         id = UUID()
         let container = try decoder.container(keyedBy: CodingKeys.self)
         
-        // Parse episode number from various field names
-        if let num = try container.decodeIfPresent(Int.self, forKey: .number) {
-            number = num
-        } else if let num = try container.decodeIfPresent(Int.self, forKey: .episodeNumber) {
-            number = num
-        } else if let num = try container.decodeIfPresent(Int.self, forKey: .episodeNum) {
-            number = num
-        } else {
+        // Parse episode number from various field names (handles both Int and String)
+        var episodeNumber: Int? = nil
+        
+        // Try Int first (using try? to avoid TypeMismatch errors if the field exists but is a String)
+        if let num = try? container.decodeIfPresent(Int.self, forKey: .number) {
+            episodeNumber = num
+        } else if let num = try? container.decodeIfPresent(Int.self, forKey: .episodeNumber) {
+            episodeNumber = num
+        } else if let num = try? container.decodeIfPresent(Int.self, forKey: .episodeNum) {
+            episodeNumber = num
+        } else if let num = try? container.decodeIfPresent(Int.self, forKey: .episodeNo) {
+            episodeNumber = num
+        } else if let num = try? container.decodeIfPresent(Int.self, forKey: .ep) {
+            episodeNumber = num
+        }
+        
+        // Try String and convert to Int if no Int found
+        if episodeNumber == nil {
+            if let numStr = try container.decodeIfPresent(String.self, forKey: .number), let num = Int(numStr) {
+                episodeNumber = num
+            } else if let numStr = try container.decodeIfPresent(String.self, forKey: .episodeNumber), let num = Int(numStr) {
+                episodeNumber = num
+            } else if let numStr = try container.decodeIfPresent(String.self, forKey: .episodeNum), let num = Int(numStr) {
+                episodeNumber = num
+            } else if let numStr = try container.decodeIfPresent(String.self, forKey: .episodeNo), let num = Int(numStr) {
+                episodeNumber = num
+            } else if let numStr = try container.decodeIfPresent(String.self, forKey: .ep), let num = Int(numStr) {
+                episodeNumber = num
+            }
+        }
+        
+        guard let num = episodeNumber else {
             throw DecodingError.keyNotFound(
                 CodingKeys.number,
-                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "No episode number found")
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "No episode number found in any expected field")
             )
         }
+        number = num
         
         title = try container.decodeIfPresent(String.self, forKey: .title)
         
-        // Parse air date from various field names
+        // Parse air date from various field names (in priority order)
         var parsedDate: Date?
         
         if let dateStr = try container.decodeIfPresent(String.self, forKey: .airDate) {
@@ -57,6 +87,12 @@ struct Episode: Codable, Identifiable {
         } else if let dateStr = try container.decodeIfPresent(String.self, forKey: .aired) {
             parsedDate = Episode.parseDate(dateStr)
         } else if let dateStr = try container.decodeIfPresent(String.self, forKey: .date) {
+            parsedDate = Episode.parseDate(dateStr)
+        } else if let dateStr = try container.decodeIfPresent(String.self, forKey: .broadcastDate) {
+            parsedDate = Episode.parseDate(dateStr)
+        } else if let dateStr = try container.decodeIfPresent(String.self, forKey: .startDate) {
+            parsedDate = Episode.parseDate(dateStr)
+        } else if let dateStr = try container.decodeIfPresent(String.self, forKey: .endDate) {
             parsedDate = Episode.parseDate(dateStr)
         }
         
@@ -77,7 +113,7 @@ struct Episode: Codable, Identifiable {
         guard let dateStr = dateStr, !dateStr.isEmpty else { return nil }
         
         let trimmed = dateStr.trimmingCharacters(in: .whitespaces).lowercased()
-        if trimmed == "tba" || trimmed == "n/a" || trimmed.contains("unknown") {
+        if trimmed == "tba" || trimmed == "n/a" || trimmed.contains("unknown") || trimmed == "" {
             return nil
         }
 
@@ -89,11 +125,15 @@ struct Episode: Codable, Identifiable {
 
         // Try common date formats
         let dateFormatters = [
-            "yyyy-MM-dd",
+            "MMM dd, yyyy",
             "MMM d, yyyy",
+            "yyyy-MM-dd",
             "dd MMM yyyy",
             "yyyy/MM/dd",
-            "MM/dd/yyyy"
+            "MM/dd/yyyy",
+            "dd/MM/yyyy",
+            "MMMM d, yyyy",
+            "d MMMM yyyy"
         ]
 
         for formatString in dateFormatters {
