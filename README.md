@@ -40,6 +40,8 @@ Availability or behavior of that API can change without notice. Use at your own 
 ## Tests
 ```bash
 xcodebuild test -project Drama.xcodeproj -scheme Drama -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17'
+# If you don't have an iPhone 17 simulator, pick any available device name from:
+# xcrun simctl list devices available
 ```
 
 ## Screenshots
