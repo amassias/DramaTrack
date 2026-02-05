@@ -14,11 +14,23 @@ struct SettingsView: View {
     @State private var notificationTime = Date()
     @State private var showNotificationTimePicker = false
     @State private var cacheMessage: String = ""
-    
+    @State private var statusToggles: [String: Bool] = [:]
+    @State private var quietHoursEnabled = true
+    @State private var quietStartTime = Date()
+    @State private var quietEndTime = Date()
+
     // Utiliser le watchlistViewModel partagé au lieu de charger à nouveau
     private var dramaList: [Drama] {
         appState.watchlistViewModel.dramas
     }
+
+    private let statusOptions = [
+        "Watching",
+        "Plan to Watch",
+        "On-Hold",
+        "Completed",
+        "Dropped"
+    ]
 
     var body: some View {
         ScrollView {
@@ -86,6 +98,105 @@ struct SettingsView: View {
                     .background(Color.white.opacity(0.05))
                     .cornerRadius(8)
                 }
+                .padding(.horizontal, 16)
+
+                // Notification Preferences
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(Color(red: 0.86, green: 0.5, blue: 1.0))
+                        Text("Notification Preferences")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+
+                    Text("Choose which drama statuses can trigger notifications.")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+
+                    VStack(spacing: 8) {
+                        ForEach(statusOptions, id: \.self) { status in
+                            Toggle(isOn: Binding(
+                                get: { statusToggles[status] ?? false },
+                                set: { newValue in
+                                    statusToggles[status] = newValue
+                                    NotificationManager.shared.setEnabledStatus(status, isEnabled: newValue)
+                                    Task { await viewModel.syncNotifications(dramas: dramaList) }
+                                }
+                            )) {
+                                Text(status)
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .tint(Color(red: 0.86, green: 0.5, blue: 1.0))
+                        }
+                    }
+
+                    Divider()
+                        .background(Color.white.opacity(0.08))
+
+                    Toggle(isOn: Binding(
+                        get: { quietHoursEnabled },
+                        set: { newValue in
+                            quietHoursEnabled = newValue
+                            saveQuietHours()
+                        }
+                    )) {
+                        Text("Enable Quiet Hours")
+                            .foregroundColor(.white)
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .tint(Color(red: 0.86, green: 0.5, blue: 1.0))
+
+                    Text("Notifications will be delayed to the next allowed time window.")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+
+                    VStack(spacing: 12) {
+                        HStack {
+                            Text("Start")
+                                .font(.system(size: 14))
+                                .foregroundColor(.gray)
+                            Spacer()
+                            DatePicker(
+                                "",
+                                selection: $quietStartTime,
+                                displayedComponents: .hourAndMinute
+                            )
+                            .labelsHidden()
+                            .colorScheme(.dark)
+                            .disabled(!quietHoursEnabled)
+                            .onChange(of: quietStartTime) { _, _ in
+                                saveQuietHours()
+                            }
+                        }
+
+                        HStack {
+                            Text("End")
+                                .font(.system(size: 14))
+                                .foregroundColor(.gray)
+                            Spacer()
+                            DatePicker(
+                                "",
+                                selection: $quietEndTime,
+                                displayedComponents: .hourAndMinute
+                            )
+                            .labelsHidden()
+                            .colorScheme(.dark)
+                            .disabled(!quietHoursEnabled)
+                            .onChange(of: quietEndTime) { _, _ in
+                                saveQuietHours()
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .background(Color.white.opacity(0.03))
+                    .cornerRadius(8)
+                }
+                .padding(12)
+                .background(Color.white.opacity(0.05))
+                .cornerRadius(8)
                 .padding(.horizontal, 16)
 
                 // Notifications Section
@@ -220,6 +331,7 @@ struct SettingsView: View {
                                 let components = Calendar.current.dateComponents([.hour, .minute], from: notificationTime)
                                 if let hour = components.hour, let minute = components.minute {
                                     NotificationManager.shared.setNotificationTime(hour: hour, minute: minute)
+                                    Task { await viewModel.syncNotifications(dramas: dramaList) }
                                     showNotificationTimePicker = false
                                 }
                             }) {
@@ -345,6 +457,29 @@ struct SettingsView: View {
             if let date = Calendar.current.date(from: components) {
                 notificationTime = date
             }
+
+            let enabledStatuses = NotificationManager.shared.getEnabledStatuses()
+            var statusMap: [String: Bool] = [:]
+            for status in statusOptions {
+                statusMap[status] = enabledStatuses.contains(status)
+            }
+            statusToggles = statusMap
+
+            let quiet = NotificationManager.shared.getQuietHours()
+            quietHoursEnabled = quiet.enabled
+            var startComponents = DateComponents()
+            startComponents.hour = quiet.start.hour
+            startComponents.minute = quiet.start.minute
+            if let date = Calendar.current.date(from: startComponents) {
+                quietStartTime = date
+            }
+
+            var endComponents = DateComponents()
+            endComponents.hour = quiet.end.hour
+            endComponents.minute = quiet.end.minute
+            if let date = Calendar.current.date(from: endComponents) {
+                quietEndTime = date
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NotificationManager.didUpdateNotifications)) { _ in
             Task {
@@ -425,6 +560,17 @@ struct SettingsView: View {
 
     private var historyPreview: [NotificationHistoryItem] {
         Array(viewModel.notificationHistory.prefix(50))
+    }
+
+    private func saveQuietHours() {
+        let startComponents = Calendar.current.dateComponents([.hour, .minute], from: quietStartTime)
+        let endComponents = Calendar.current.dateComponents([.hour, .minute], from: quietEndTime)
+
+        let start = (startComponents.hour ?? 23, startComponents.minute ?? 0)
+        let end = (endComponents.hour ?? 7, endComponents.minute ?? 0)
+
+        NotificationManager.shared.setQuietHours(enabled: quietHoursEnabled, start: start, end: end)
+        Task { await viewModel.syncNotifications(dramas: dramaList) }
     }
 
 }

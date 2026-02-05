@@ -7,6 +7,7 @@ struct RootView: View {
 
     enum Tab {
         case watchlist
+        case smartLists
         case detail
         case settings
     }
@@ -68,6 +69,10 @@ struct RootView: View {
                         }
                     }
 
+                case .smartLists:
+                    SmartListsView()
+                        .environmentObject(appState)
+
                 case .settings:
                     SettingsView(username: username, onLogout: {
                         appState.clearUsername()
@@ -106,6 +111,17 @@ struct BottomTabBar: View {
                 action: {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         currentTab = .watchlist
+                    }
+                }
+            )
+
+            TabBarItem(
+                icon: "sparkles",
+                title: "Smart Lists",
+                isActive: currentTab == .smartLists,
+                action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        currentTab = .smartLists
                     }
                 }
             )

@@ -18,9 +18,7 @@ struct NotificationSyncSummary: Equatable {
 struct NotificationSyncService {
     nonisolated static let defaultIncludedStatuses: Set<String> = [
         "Watching",
-        "Plan to Watch",
-        "On-Hold",
-        "Completed"
+        "Plan to Watch"
     ]
 
     let episodeProvider: EpisodeProviding

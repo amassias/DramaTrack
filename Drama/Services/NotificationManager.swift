@@ -12,6 +12,10 @@ class NotificationManager {
     private let notificationCenter = UNUserNotificationCenter.current()
     private let enabledSlugsKey = "mdl_enabled_notifications"
     private let notificationTimeKey = "mdl_notification_time"
+    private let enabledStatusesKey = "mdl_notification_statuses_enabled"
+    private let quietHoursEnabledKey = "mdl_quiet_hours_enabled"
+    private let quietHoursStartKey = "mdl_quiet_hours_start"
+    private let quietHoursEndKey = "mdl_quiet_hours_end"
     private let permissionPromptedKey = "mdl_notifications_prompted"
     private let usernameKey = "mdl_username"
     private let backgroundRefreshTaskId = "com.arthurmassias.Drama.refresh"
@@ -42,6 +46,10 @@ class NotificationManager {
     }
 
     func scheduleNotification(for drama: Drama, episode: Episode) async -> Bool {
+        guard getEnabledStatuses().contains(drama.status) else {
+            return false
+        }
+
         // Check permission
         let hasPermission = await isPermissionGranted()
         if !hasPermission {
@@ -72,8 +80,10 @@ class NotificationManager {
             return false
         }
 
+        let adjustedTime = applyQuietHours(to: notificationTime)
+
         // Only schedule if time is in future
-        if notificationTime <= now {
+        if adjustedTime <= now {
             return false
         }
 
@@ -103,7 +113,7 @@ class NotificationManager {
 
         // Calculate trigger
         let trigger = UNCalendarNotificationTrigger(
-            dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: notificationTime),
+            dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: adjustedTime),
             repeats: false
         )
 
@@ -226,24 +236,35 @@ class NotificationManager {
         dramas: [Drama],
         windowDays: Int?,
         replaceExisting: Bool,
-        includeStatuses: Set<String> = NotificationSyncService.defaultIncludedStatuses
+        includeStatuses: Set<String>? = nil
     ) async -> NotificationSyncSummary {
         let hasPermission = await isPermissionGranted()
         guard hasPermission else {
             return NotificationSyncSummary(scheduledCount: 0, errorCount: 0)
         }
 
+        let statuses = includeStatuses ?? getEnabledStatuses()
         let service = NotificationSyncService(episodeProvider: APIClient.shared, scheduler: self)
         let summary = await service.syncUpcomingNotifications(
             dramas: dramas,
             windowDays: windowDays,
             replaceExisting: replaceExisting,
             maxNotifications: maxScheduledNotifications,
-            includeStatuses: includeStatuses
+            includeStatuses: statuses
         )
 
         NotificationCenter.default.post(name: NotificationManager.didUpdateNotifications, object: nil)
         return summary
+    }
+
+    func resyncUsingCurrentSettings(dramas: [Drama], windowDays: Int? = nil, replaceExisting: Bool = true) async -> NotificationSyncSummary {
+        let statuses = getEnabledStatuses()
+        return await syncUpcomingNotifications(
+            dramas: dramas,
+            windowDays: windowDays,
+            replaceExisting: replaceExisting,
+            includeStatuses: statuses
+        )
     }
 
     // MARK: - Background Refresh
@@ -373,6 +394,103 @@ class NotificationManager {
     func setNotificationTime(hour: Int, minute: Int) {
         let timeDict: [String: Int] = ["hour": hour, "minute": minute]
         UserDefaults.standard.set(timeDict, forKey: notificationTimeKey)
+    }
+
+    // MARK: - Notification Status Preferences
+
+    func getEnabledStatuses() -> Set<String> {
+        let map = getEnabledStatusMap()
+        let enabled = map.compactMap { key, value in
+            value ? key : nil
+        }
+        return Set(enabled)
+    }
+
+    func setEnabledStatus(_ status: String, isEnabled: Bool) {
+        var map = getEnabledStatusMap()
+        map[status] = isEnabled
+        UserDefaults.standard.set(map, forKey: enabledStatusesKey)
+    }
+
+    private func getEnabledStatusMap() -> [String: Bool] {
+        if let stored = UserDefaults.standard.dictionary(forKey: enabledStatusesKey) as? [String: Bool] {
+            return stored
+        }
+
+        return [
+            "Watching": true,
+            "Plan to Watch": true,
+            "On-Hold": false,
+            "Completed": false,
+            "Dropped": false
+        ]
+    }
+
+    // MARK: - Quiet Hours Preferences
+
+    func getQuietHours() -> (enabled: Bool, start: (hour: Int, minute: Int), end: (hour: Int, minute: Int)) {
+        let enabled = UserDefaults.standard.object(forKey: quietHoursEnabledKey) as? Bool ?? true
+
+        let startDict = UserDefaults.standard.dictionary(forKey: quietHoursStartKey) as? [String: Int]
+        let endDict = UserDefaults.standard.dictionary(forKey: quietHoursEndKey) as? [String: Int]
+
+        let startHour = startDict?["hour"] ?? 23
+        let startMinute = startDict?["minute"] ?? 0
+        let endHour = endDict?["hour"] ?? 7
+        let endMinute = endDict?["minute"] ?? 0
+
+        return (enabled, (startHour, startMinute), (endHour, endMinute))
+    }
+
+    func setQuietHours(enabled: Bool, start: (hour: Int, minute: Int), end: (hour: Int, minute: Int)) {
+        UserDefaults.standard.set(enabled, forKey: quietHoursEnabledKey)
+        UserDefaults.standard.set(["hour": start.hour, "minute": start.minute], forKey: quietHoursStartKey)
+        UserDefaults.standard.set(["hour": end.hour, "minute": end.minute], forKey: quietHoursEndKey)
+    }
+
+    private func applyQuietHours(to date: Date) -> Date {
+        let settings = getQuietHours()
+        guard settings.enabled else { return date }
+
+        let startMinutes = settings.start.hour * 60 + settings.start.minute
+        let endMinutes = settings.end.hour * 60 + settings.end.minute
+
+        guard startMinutes != endMinutes else { return date }
+
+        let calendar = Calendar.current
+        let timeComponents = calendar.dateComponents([.hour, .minute], from: date)
+        let currentMinutes = (timeComponents.hour ?? 0) * 60 + (timeComponents.minute ?? 0)
+
+        let isOvernight = startMinutes > endMinutes
+        let isInQuiet: Bool
+        if isOvernight {
+            isInQuiet = currentMinutes >= startMinutes || currentMinutes < endMinutes
+        } else {
+            isInQuiet = currentMinutes >= startMinutes && currentMinutes < endMinutes
+        }
+
+        guard isInQuiet else { return date }
+
+        if isOvernight {
+            if currentMinutes >= startMinutes {
+                return nextDay(at: settings.end, from: date) ?? date
+            } else {
+                return sameDay(at: settings.end, from: date) ?? date
+            }
+        } else {
+            return sameDay(at: settings.end, from: date) ?? date
+        }
+    }
+
+    private func sameDay(at time: (hour: Int, minute: Int), from date: Date) -> Date? {
+        let calendar = Calendar.current
+        return calendar.date(bySettingHour: time.hour, minute: time.minute, second: 0, of: date)
+    }
+
+    private func nextDay(at time: (hour: Int, minute: Int), from date: Date) -> Date? {
+        let calendar = Calendar.current
+        guard let next = calendar.date(byAdding: .day, value: 1, to: date) else { return nil }
+        return calendar.date(bySettingHour: time.hour, minute: time.minute, second: 0, of: next)
     }
 
     private func notificationIdentifier(slug: String, episode: Episode) -> String {

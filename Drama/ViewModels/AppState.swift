@@ -238,6 +238,7 @@ class WatchlistViewModel: ObservableObject {
             }
 
             saveWatchlistCache(response.dramas)
+            StatusHistoryStore.shared.update(with: response.dramas)
             
             // Fetch ratings and posters in background only if cache is invalid or force refresh
             if !hasCachedDetails {
@@ -597,11 +598,7 @@ class SettingsViewModel: ObservableObject {
     func syncNotifications(dramas: [Drama]) async {
         await MainActor.run { self.isRefreshing = true }
 
-        _ = await notificationManager.syncUpcomingNotifications(
-            dramas: dramas,
-            windowDays: nil,
-            replaceExisting: true
-        )
+        _ = await notificationManager.resyncUsingCurrentSettings(dramas: dramas)
 
         await MainActor.run {
             self.isRefreshing = false

@@ -77,8 +77,14 @@ struct OnboardingView: View {
                             Image(systemName: "at")
                                 .foregroundColor(.gray)
                             
-                            TextField("username", text: $username)
-                                .foregroundColor(.white)
+                            TextField(
+                                text: $username,
+                                prompt: Text("username")
+                                    .foregroundColor(Color.white.opacity(0.6))
+                            ) {
+                                EmptyView()
+                            }
+                            .foregroundColor(.white)
                                 .textFieldStyle(.plain)
                                 .autocapitalization(.none)
                                 .disableAutocorrection(true)
@@ -89,7 +95,11 @@ struct OnboardingView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 14)
-                        .background(Color.white.opacity(0.1))
+                        .background(Color.white.opacity(0.18))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
                         .cornerRadius(12)
                         
                         if !error.isEmpty {
